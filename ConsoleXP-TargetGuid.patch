@@ -1,0 +1,65 @@
+--- a/src/ConsoleXP/API.cpp
++++ b/src/ConsoleXP/API.cpp
+@@ -4,6 +4,9 @@
+ #include "Targeting.h"
+ #include "Log.h"
+ 
++#include <cerrno>
++#include <cstdlib>
++
+ 
+ typedef uint32_t(__cdecl* CGGameUI_CheckPermissions_t)(int permissionType);
+ CGGameUI_CheckPermissions_t CheckPermissions = (CGGameUI_CheckPermissions_t)0x005191C0;
+@@ -111,6 +114,44 @@
+ 	return 1;
+ }
+ 
++// Targets a GUID supplied by Lua, but only during a permitted hardware event.
++// Intended caller: C_ConsoleXP.TargetGuid(UnitGUID("raid7")).
++int C_ConsoleXP_TargetGuid(lua_State* L)
++{
++	if (CheckPermissions(0) == 0) // Preserve WoW's hardware-event protection.
++	{
++		Lua::PushBoolean(L, false);
++		return 1;
++	}
++
++	if (Lua::GetTop(L) < 1 || !Lua::IsString(L, 1))
++	{
++		Lua::PushBoolean(L, false);
++		return 1;
++	}
++
++	const char* guidText = Lua::ToString(L, 1);
++	if (guidText == nullptr || *guidText == '\0')
++	{
++		Lua::PushBoolean(L, false);
++		return 1;
++	}
++
++	errno = 0;
++	char* end = nullptr;
++	const unsigned long long parsed = std::strtoull(guidText, &end, 0);
++
++	if (errno == ERANGE || end == guidText || end == nullptr || *end != '\0' || parsed == 0)
++	{
++		Lua::PushBoolean(L, false);
++		return 1;
++	}
++
++	Game::SetTarget(static_cast<uint64_t>(parsed));
++	Lua::PushBoolean(L, true);
++	return 1;
++}
++
+ int C_ConsoleXP_CastReticle(lua_State* L)
+ {
+ 	Game::CastReticle();
+@@ -130,6 +171,7 @@
+ 		{"TargetNextMarkedEnemyInCycle", C_ConsoleXP_TargetNextMarkedEnemyInCycle},
+ 		{"TargetPreviousMarkedEnemyInCycle", C_ConsoleXP_TargetPreviousMarkedEnemyInCycle},
+ 		{"TargetWorldBoss", C_ConsoleXP_TargetWorldBoss},
++		{"TargetGuid", C_ConsoleXP_TargetGuid},
+ 		{"CastReticle", C_ConsoleXP_CastReticle},
+ 	};
+ 	lua_createtable(L, 0, std::size(methods));

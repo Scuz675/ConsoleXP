@@ -1,0 +1,11 @@
+src/ConsoleXP/API.cpp
+    Patched ConsoleXP source with C_ConsoleXP.TargetGuid.
+
+.github/workflows/build-targetguid.yml
+    Online Visual Studio 2022 / Win32 build workflow.
+
+ConsoleXP-TargetGuid.patch
+    Unified diff for users who prefer git apply.
+
+README-LINUX-BUILD.md
+    Browser-only and Linux terminal instructions.

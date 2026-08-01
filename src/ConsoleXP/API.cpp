@@ -4,19 +4,21 @@
 #include "Targeting.h"
 #include "Log.h"
 
+#include <cerrno>
+#include <cstdlib>
+
 
 typedef uint32_t(__cdecl* CGGameUI_CheckPermissions_t)(int permissionType);
 CGGameUI_CheckPermissions_t CheckPermissions = (CGGameUI_CheckPermissions_t)0x005191C0;
 
 int C_ConsoleXP_InteractNearest(lua_State* L)
-{ 
+{
 	if (CheckPermissions(0) != 0) // PROTECTED
 	{
 		Interact::InteractKey();
 	}
     return 1;
 }
-
 int C_ConsoleXP_InteractMouseOver(lua_State* L)
 {
 	if (CheckPermissions(0) != 0) // PROTECTED
@@ -35,7 +37,6 @@ int C_ConsoleXP_GetCameraZoom(lua_State* L)
 
     return 1;
 }
-
 int C_ConsoleXP_TargetNearestEnemy(lua_State* L)
 {
 	if (CheckPermissions(0) != 0) // PROTECTED
@@ -53,7 +54,6 @@ int C_ConsoleXP_TargetNextEnemyConsideringDistance(lua_State* L)
 	}
 	return 1;
 }
-
 int C_ConsoleXP_TargetPreviousEnemyConsideringDistance(lua_State* L)
 {
 	if (CheckPermissions(0) != 0) // PROTECTED
@@ -71,7 +71,6 @@ int C_ConsoleXP_TargetNextEnemyInCycle(lua_State* L)
 	}
 	return 1;
 }
-
 int C_ConsoleXP_TargetPreviousEnemyInCycle(lua_State* L)
 {
 	if (CheckPermissions(0) != 0) // PROTECTED
@@ -80,7 +79,6 @@ int C_ConsoleXP_TargetPreviousEnemyInCycle(lua_State* L)
 	}
 	return 1;
 }
-
 int C_ConsoleXP_TargetNextMarkedEnemyInCycle(lua_State* L)
 {
 	if (CheckPermissions(0) != 0) // PROTECTED
@@ -94,7 +92,6 @@ int C_ConsoleXP_TargetNextMarkedEnemyInCycle(lua_State* L)
 	}
 	return 1;
 }
-
 int C_ConsoleXP_TargetPreviousMarkedEnemyInCycle(lua_State* L)
 {
 	if (CheckPermissions(0) != 0) // PROTECTED
@@ -108,7 +105,6 @@ int C_ConsoleXP_TargetPreviousMarkedEnemyInCycle(lua_State* L)
 	}
 	return 1;
 }
-
 int C_ConsoleXP_TargetWorldBoss(lua_State* L)
 {
 	if (CheckPermissions(0) != 0) // PROTECTED
@@ -118,12 +114,49 @@ int C_ConsoleXP_TargetWorldBoss(lua_State* L)
 	return 1;
 }
 
+// Targets a GUID supplied by Lua, but only during a permitted hardware event.
+// Intended caller: C_ConsoleXP.TargetGuid(UnitGUID("raid7")).
+int C_ConsoleXP_TargetGuid(lua_State* L)
+{
+	if (CheckPermissions(0) == 0) // Preserve WoW's hardware-event protection.
+	{
+		Lua::PushBoolean(L, false);
+		return 1;
+	}
+
+	if (Lua::GetTop(L) < 1 || !Lua::IsString(L, 1))
+	{
+		Lua::PushBoolean(L, false);
+		return 1;
+	}
+
+	const char* guidText = Lua::ToString(L, 1);
+	if (guidText == nullptr || *guidText == '\0')
+	{
+		Lua::PushBoolean(L, false);
+		return 1;
+	}
+
+	errno = 0;
+	char* end = nullptr;
+	const unsigned long long parsed = std::strtoull(guidText, &end, 0);
+
+	if (errno == ERANGE || end == guidText || end == nullptr || *end != '\0' || parsed == 0)
+	{
+		Lua::PushBoolean(L, false);
+		return 1;
+	}
+
+	Game::SetTarget(static_cast<uint64_t>(parsed));
+	Lua::PushBoolean(L, true);
+	return 1;
+}
+
 int C_ConsoleXP_CastReticle(lua_State* L)
 {
 	Game::CastReticle();
 	return 1;
 }
-
 static int lua_openlibconsolexp(lua_State* L)
 {
 	luaL_Reg methods[] = {
@@ -138,9 +171,9 @@ static int lua_openlibconsolexp(lua_State* L)
 		{"TargetNextMarkedEnemyInCycle", C_ConsoleXP_TargetNextMarkedEnemyInCycle},
 		{"TargetPreviousMarkedEnemyInCycle", C_ConsoleXP_TargetPreviousMarkedEnemyInCycle},
 		{"TargetWorldBoss", C_ConsoleXP_TargetWorldBoss},
-		{"CastReticle", C_ConsoleXP_CastReticle}, 
+		{"TargetGuid", C_ConsoleXP_TargetGuid},
+		{"CastReticle", C_ConsoleXP_CastReticle},
 	};
-
 	lua_createtable(L, 0, std::size(methods));
 	for (size_t i = 0; i < std::size(methods); i++) {
 		lua_pushcfunction(L, methods[i].func);
